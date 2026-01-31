@@ -60,6 +60,13 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Log DATABASE_URL presence
+  if (!process.env.DATABASE_URL) {
+    console.warn('⚠️ DATABASE_URL is not set. Please set it in Render Environment variables to enable DB migrations and avoid 42P01 errors.');
+  } else {
+    console.log('ℹ️ DATABASE_URL detected, attempting to run migrations.');
+  }
+
   // Ensure DB migrations are applied (fallback) before registering routes
   try {
     await (await import("./db")).applyMigrationsIfNeeded();

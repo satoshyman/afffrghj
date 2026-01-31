@@ -35,16 +35,26 @@ export async function applyMigrationsIfNeeded() {
 
   // First try using drizzle-kit (more robust) if available
   try {
-    console.log('⚙️ Attempting to run `drizzle-kit push`...');
+    console.log('⚙️ Attempting to run `drizzle-kit push`... (cwd=' + process.cwd() + ')');
     const cmd = `npx drizzle-kit push --schema ./shared/schema.ts --url "${process.env.DATABASE_URL}"`;
-    const out = execSync(cmd, { stdio: 'pipe', env: process.env }).toString();
+    const child = execSync(cmd, { stdio: 'pipe', env: process.env });
+    const out = child.toString();
     console.log('✅ drizzle-kit output:\n', out);
     return;
   } catch (err: any) {
-    console.warn('⚠️ drizzle-kit push failed or not available, falling back to SQL apply. Error:', err.message || err);
+    console.warn('⚠️ drizzle-kit push failed or not available, falling back to SQL apply. Error:', (err && (err.message || err)).toString());
+    if (err && err.stdout) console.warn('drizzle-kit stdout:', err.stdout.toString());
+    if (err && err.stderr) console.warn('drizzle-kit stderr:', err.stderr.toString());
   }
 
-  const client = await pool.connect();
+  // Try opening a connection to determine if DB is reachable
+  let client;
+  try {
+    client = await pool.connect();
+  } catch (err: any) {
+    console.error('❌ Could not connect to the database:', err.message || err);
+    throw err;
+  }
   try {
     const res = await client.query("SELECT to_regclass('public.users') AS exists");
     if (res.rows[0].exists) {

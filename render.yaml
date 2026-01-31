@@ -11,6 +11,9 @@ services:
         sync: false
       - key: BOT_TOKEN
         sync: false
+      - key: WEBAPP_URL
+        value: "https://f-h88c.onrender.com"
+        sync: false
       - key: CSS_TRANSFORMER_WASM
         value: "0"
         sync: false

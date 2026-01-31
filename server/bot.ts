@@ -35,7 +35,7 @@ if (!token) {
       }
     }
 
-    const webAppUrl = process.env.WEBAPP_URL || "https://ton-frog-jump.onrender.com";
+    const webAppUrl = process.env.WEBAPP_URL || "https://f-h88c.onrender.com";
     console.log(`ℹ️ Using WebApp URL: ${webAppUrl}`);
 
     return ctx.reply(

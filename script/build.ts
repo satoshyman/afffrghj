@@ -43,6 +43,17 @@ async function main() {
     logLevel: "info",
   });
 
+  // Ensure migrations are copied into the dist folder so runtime can find them
+  const migrationsSrc = path.join(root, 'migrations');
+  const migrationsDest = path.join(root, 'dist', 'migrations');
+  if (fs.existsSync(migrationsSrc)) {
+    console.log(`📦 Copying migrations -> ${migrationsDest}`);
+    fs.rmSync(migrationsDest, { recursive: true, force: true });
+    fs.cpSync(migrationsSrc, migrationsDest, { recursive: true });
+  } else {
+    console.warn('⚠️ migrations folder not found in project root; skipping copy.');
+  }
+
   console.log("✅ Build complete. Output in ./dist (server) and ./dist/public (client).");
 }
 

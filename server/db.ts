@@ -65,15 +65,32 @@ export async function applyMigrationsIfNeeded() {
 
     // If running from compiled `dist` the CWD may not be project root.
     // Search upward for a `migrations` directory to support Render runtime.
+    // Try multiple starting points: process.cwd() (normal), and __dirname (bundled runtime).
     function findMigrationsDir(): string | null {
-      let dir = process.cwd();
-      for (let i = 0; i < 6; i++) {
-        const candidate = path.join(dir, 'migrations');
-        if (fs.existsSync(candidate)) return candidate;
-        const parent = path.dirname(dir);
-        if (parent === dir) break;
-        dir = parent;
+      const starts = [process.cwd(), __dirname];
+
+      for (const start of starts) {
+        let dir = start;
+        console.log(`🔎 Searching for migrations starting at ${dir}`);
+        for (let i = 0; i < 8; i++) {
+          const candidate = path.join(dir, 'migrations');
+          if (fs.existsSync(candidate)) {
+            console.log('📁 Found migrations at', candidate);
+            return candidate;
+          }
+          const parent = path.dirname(dir);
+          if (parent === dir) break;
+          dir = parent;
+        }
       }
+
+      // Final simple relative fallback from the compiled file location
+      const rel = path.join(__dirname, '..', 'migrations');
+      if (fs.existsSync(rel)) {
+        console.log('📁 Found migrations at (relative) ', rel);
+        return rel;
+      }
+
       return null;
     }
 

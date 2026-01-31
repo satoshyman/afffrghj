@@ -25,10 +25,23 @@ if (!process.env.DATABASE_URL) {
  * Apply SQL migrations from the migrations/ folder if core tables are missing.
  * This is a safe fallback so deploys don't fail when migrations weren't run during build.
  */
+import { execSync } from "child_process";
+
 export async function applyMigrationsIfNeeded() {
   if (!pool) {
     console.warn('⚠️ Skipping migrations: DATABASE_URL not configured or pool not available.');
     return;
+  }
+
+  // First try using drizzle-kit (more robust) if available
+  try {
+    console.log('⚙️ Attempting to run `drizzle-kit push`...');
+    const cmd = `npx drizzle-kit push --schema ./shared/schema.ts --url "${process.env.DATABASE_URL}"`;
+    const out = execSync(cmd, { stdio: 'pipe', env: process.env }).toString();
+    console.log('✅ drizzle-kit output:\n', out);
+    return;
+  } catch (err: any) {
+    console.warn('⚠️ drizzle-kit push failed or not available, falling back to SQL apply. Error:', err.message || err);
   }
 
   const client = await pool.connect();
@@ -38,7 +51,7 @@ export async function applyMigrationsIfNeeded() {
       return; // users table exists, migrations already applied
     }
 
-    console.log('⚙️ Applying migrations: users table not found');
+    console.log('⚙️ Applying migrations: users table not found (SQL fallback)');
 
     const migrationsDir = path.resolve(process.cwd(), 'migrations');
     if (!fs.existsSync(migrationsDir)) {

@@ -237,6 +237,23 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  // Admin endpoint to trigger migrations (protected by ADMIN_SECRET header)
+  app.post('/api/admin/migrate', async (req, res) => {
+    const secret = req.headers['x-admin-secret'] as string | undefined;
+    if (!process.env.ADMIN_SECRET || secret !== process.env.ADMIN_SECRET) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    try {
+      const { applyMigrationsIfNeeded } = await import('./db');
+      await applyMigrationsIfNeeded();
+      return res.json({ success: true });
+    } catch (err) {
+      console.error('Manual migration run failed:', err);
+      return res.status(500).json({ success: false, error: String(err) });
+    }
+  });
+
   app.get("/api/admin/tasks", async (req, res) => {
     const tasks = await storage.getTasks();
     res.json(tasks);

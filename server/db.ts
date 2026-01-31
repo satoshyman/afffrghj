@@ -1,88 +1,71 @@
-import { drizzle } from "drizzle-orm/node-postgres";
-import pg from "pg";
-import fs from "fs";
-import path from "path";
-import * as schema from "@shared/schema";
+import { MongoClient, Db, Collection } from "mongodb";
 
-const { Pool } = pg;
-
-// Make pool and db optional so the app can start even if the DATABASE_URL
-// is not configured yet. This allows a clearer log message and a fallback
-// migration attempt instead of an immediate crash during startup.
-export let pool: pg.Pool | null = null;
-export let db: ReturnType<typeof drizzle> | null = null;
-
-if (!process.env.DATABASE_URL) {
-  console.warn(
-    "⚠️ DATABASE_URL is not set. The app will start but database operations will fail until you set DATABASE_URL in Render Environment variables.",
-  );
-} else {
-  pool = new Pool({ connectionString: process.env.DATABASE_URL });
-  db = drizzle(pool, { schema });
-}
+export let mongoClient: MongoClient | null = null;
+export let db: Db | null = null;
 
 /**
- * Apply SQL migrations from the migrations/ folder if core tables are missing.
- * This is a safe fallback so deploys don't fail when migrations weren't run during build.
+ * Connect to MongoDB using MONGO_URL and optional MONGO_DB_NAME.
+ * Also creates required indexes and counters for id generation.
  */
-import { execSync } from "child_process";
+export async function connectMongo() {
+  const url = process.env.MONGO_URL || process.env.DATABASE_URL;
+  const dbName = process.env.MONGO_DB_NAME || process.env.MONGO_DB || 'frog';
 
-export async function applyMigrationsIfNeeded() {
-  if (!pool) {
-    console.warn('⚠️ Skipping migrations: DATABASE_URL not configured or pool not available.');
+  if (!url) {
+    console.warn('⚠️ MONGO_URL (or DATABASE_URL) is not set. The app will start but database operations will fail until set in environment variables.');
     return;
   }
 
-  // First try using drizzle-kit (more robust) if available
-  try {
-    console.log('⚙️ Attempting to run `drizzle-kit push`...');
-    const cmd = `npx drizzle-kit push --schema ./shared/schema.ts --url "${process.env.DATABASE_URL}"`;
-    const out = execSync(cmd, { stdio: 'pipe', env: process.env }).toString();
-    console.log('✅ drizzle-kit output:\n', out);
-    return;
-  } catch (err: any) {
-    console.warn('⚠️ drizzle-kit push failed or not available, falling back to SQL apply. Error:', err.message || err);
-  }
+  console.log('🔌 Connecting to MongoDB...');
+  mongoClient = new MongoClient(url);
+  await mongoClient.connect();
+  db = mongoClient.db(dbName);
+  console.log('✅ Connected to MongoDB:', db.databaseName);
 
-  const client = await pool.connect();
-  try {
-    const res = await client.query("SELECT to_regclass('public.users') AS exists");
-    if (res.rows[0].exists) {
-      return; // users table exists, migrations already applied
-    }
-
-    console.log('⚙️ Applying migrations: users table not found (SQL fallback)');
-
-    const migrationsDir = path.resolve(process.cwd(), 'migrations');
-    if (!fs.existsSync(migrationsDir)) {
-      console.warn('No migrations directory found, skipping migrations');
-      return;
-    }
-
-    const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
-    for (const file of files) {
-      const fullPath = path.join(migrationsDir, file);
-      const raw = fs.readFileSync(fullPath, 'utf-8');
-
-      // drizzle outputs --> statement-breakpoint separators; split statements by that
-      const parts = raw.split('--> statement-breakpoint');
-      for (let stmt of parts) {
-        stmt = stmt.trim();
-        if (!stmt) continue;
-
-        // make CREATE TABLE idempotent
-        stmt = stmt.replace(/CREATE TABLE "(\w+)"/g, 'CREATE TABLE IF NOT EXISTS "$1"');
-
-        try {
-          await client.query(stmt);
-        } catch (err: any) {
-          console.error(`Migration statement failed: ${err.message || err}`);
-        }
-      }
-    }
-
-    console.log('✅ Migrations applied (fallback)');
-  } finally {
-    client.release();
-  }
+  await ensureIndexesAndCounters();
 }
+
+function getCollection(name: string): Collection<any> {
+  if (!db) throw new Error('MongoDB not connected');
+  return db.collection(name);
+}
+
+async function ensureIndexesAndCounters() {
+  if (!db) return;
+
+  console.log('⚙️ Ensuring collections and indexes...');
+
+  // users: ensure unique telegramId and referralCode
+  await getCollection('users').createIndex({ telegramId: 1 }, { unique: true, sparse: true });
+  await getCollection('users').createIndex({ referralCode: 1 }, { unique: true, sparse: true });
+
+  // botSettings: unique key
+  await getCollection('botSettings').createIndex({ key: 1 }, { unique: true });
+
+  // counters collection for numeric auto-increment ids
+  const counters = getCollection('counters');
+  const existing = await counters.findOne({ _id: 'users' } as any);
+  if (!existing) {
+    await counters.insertOne({ _id: 'users', seq: 1 } as any);
+  }
+  const existingW = await counters.findOne({ _id: 'withdrawals' } as any);
+  if (!existingW) {
+    await counters.insertOne({ _id: 'withdrawals', seq: 1 } as any);
+  }
+  const existingT = await counters.findOne({ _id: 'tasks' } as any);
+  if (!existingT) {
+    await counters.insertOne({ _id: 'tasks', seq: 1 } as any);
+  }
+
+  console.log('✅ Indexes and counters ensured');
+}
+
+export async function getNextSequence(name: string): Promise<number> {
+  if (!db) throw new Error('MongoDB not connected');
+  const counters = getCollection('counters');
+  const res = await counters.findOneAndUpdate({ _id: name } as any, { $inc: { seq: 1 } }, { returnDocument: 'after', upsert: true } as any);
+  return (res.value as any).seq;
+}
+
+export { getCollection };
+

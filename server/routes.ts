@@ -244,12 +244,12 @@ export async function registerRoutes(
       return res.status(403).json({ message: 'Forbidden' });
     }
 
-    try {
-      const { applyMigrationsIfNeeded } = await import('./db');
-      await applyMigrationsIfNeeded();
+      try {
+      const dbModule = await import('./db');
+      await dbModule.connectMongo();
       return res.json({ success: true });
     } catch (err) {
-      console.error('Manual migration run failed:', err);
+      console.error('Manual migration (ensure collections) failed:', err);
       return res.status(500).json({ success: false, error: String(err) });
     }
   });

@@ -23,9 +23,6 @@ if (!token) {
               telegramId: telegramId,
               username: ctx.from?.username || name,
               referrerId: referrer.id,
-              balance: "0",
-              level: 1,
-              experience: 0,
             });
             console.log(`✅ New user ${telegramId} referred by ${referrer.telegramId}`);
           }
@@ -49,6 +46,18 @@ if (!token) {
     );
   });
 
-  bot.launch();
-    console.log("✅ Telegram bot is running...");
+  (async () => {
+    try {
+      await bot.launch();
+      console.log("✅ Telegram bot is running...");
+    } catch (err: any) {
+      console.error("❌ Telegram bot failed to launch:", err && (err.message || err));
+      // Specific guidance for 409 conflict (multiple getUpdates clients)
+      const text = (err && (err.message || err.description || '')).toString();
+      if (text.includes('Conflict') || text.includes('terminated by other getUpdates')) {
+        console.error('⚠️ Telegram conflict: another bot instance is using the same BOT_TOKEN. Stop other instances (local dev or other deployed copies) or switch to webhooks.');
+      }
+    }
+  })();
+    
 }

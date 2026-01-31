@@ -60,18 +60,19 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Log DATABASE_URL presence
-  if (!process.env.DATABASE_URL) {
-    console.warn('⚠️ DATABASE_URL is not set. Please set it in Render Environment variables to enable DB migrations and avoid 42P01 errors.');
+  // Try to connect to MongoDB (MONGO_URL) or fall back to checking DATABASE_URL for compatibility
+  if (!process.env.MONGO_URL && !process.env.DATABASE_URL) {
+    console.warn('⚠️ MONGO_URL (or DATABASE_URL) is not set. Please set it in Render Environment variables to enable DB operations.');
   } else {
-    console.log('ℹ️ DATABASE_URL detected, attempting to run migrations.');
+    console.log('ℹ️ MongoDB connection string detected, attempting to connect.');
   }
 
-  // Ensure DB migrations are applied (fallback) before registering routes
+  // Connect to MongoDB and ensure indexes/collections before registering routes
   try {
-    await (await import("./db")).applyMigrationsIfNeeded();
+    const dbModule = await import("./db");
+    await dbModule.connectMongo();
   } catch (err) {
-    console.error('Failed to run fallback migrations:', err);
+    console.error('Failed to connect to MongoDB and ensure collections/indexes:', err);
   }
 
   await registerRoutes(httpServer, app);

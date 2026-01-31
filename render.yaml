@@ -11,3 +11,6 @@ services:
         sync: false
       - key: BOT_TOKEN
         sync: false
+      - key: CSS_TRANSFORMER_WASM
+        value: "0"
+        sync: false

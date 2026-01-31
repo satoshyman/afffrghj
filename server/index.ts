@@ -60,6 +60,13 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Ensure DB migrations are applied (fallback) before registering routes
+  try {
+    await (await import("./db")).applyMigrationsIfNeeded();
+  } catch (err) {
+    console.error('Failed to run fallback migrations:', err);
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

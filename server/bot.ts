@@ -35,12 +35,15 @@ if (!token) {
       }
     }
 
+    const webAppUrl = process.env.WEBAPP_URL || "https://ton-frog-jump.onrender.com";
+    console.log(`ℹ️ Using WebApp URL: ${webAppUrl}`);
+
     return ctx.reply(
       `👋 Welcome, ${name}!\n🎮 Are you ready to play Ton Frog Jump?\n\nTap the button below to start the game 🐸🚀`,
       Markup.inlineKeyboard([
         Markup.button.webApp(
           "🐸 Play Ton Frog Jump",
-          "https://ton-frog-jump.onrender.com"
+          webAppUrl
         ),
       ])
     );

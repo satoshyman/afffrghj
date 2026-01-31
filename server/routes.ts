@@ -36,9 +36,7 @@ export async function registerRoutes(
            const referrer = await storage.getUserByTelegramId(referralCode);
            if (referrer) {
              referrerId = referrer.id;
-             // Reward is added upon registration
-             const referralReward = await storage.getSetting("referralReward") || "0.00005";
-             await storage.updateUserBalance(referrer.id, parseFloat(referralReward));
+             // Reward will be granted after the referred user plays for 1 hour (handled on /api/users/jump)
            }
         }
 
@@ -82,6 +80,7 @@ export async function registerRoutes(
       if (timeSinceReg >= oneHour) {
         const referralReward = await storage.getSetting("referralReward") || "0.00005";
         await storage.updateUserBalance(updatedUser.referrerId, parseFloat(referralReward));
+        console.log(`[REFERRAL] ${new Date().toISOString()} Granted ${referralReward} TON to referrerId=${updatedUser.referrerId} for referredUser=${user.telegramId}`);
         await storage.markReferralRewardClaimed(user.id);
       }
     }

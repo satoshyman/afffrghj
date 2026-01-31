@@ -13,7 +13,7 @@ export default function Referrals() {
   const { data: referrals, isLoading } = useReferrals();
   const { toast } = useToast();
 
-  const botUsername = 'Frogreward_bot';
+  const botUsername = 'Frogrewerd_bot';
   const referralLink = user?.telegramId 
     ? `https://t.me/${botUsername}?start=${user.telegramId}`
     : 'Loading...';
@@ -133,7 +133,7 @@ export default function Referrals() {
 
         <p className="mt-4 text-xs text-muted-foreground flex items-center justify-center gap-1 relative z-10">
           <Sparkles className="w-3 h-3 text-yellow-400" />
-          Instant reward when they join!
+          Reward added after they play actively for 1 hour
         </p>
       </motion.div>
 

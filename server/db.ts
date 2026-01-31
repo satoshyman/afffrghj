@@ -6,20 +6,31 @@ import * as schema from "@shared/schema";
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
-}
+// Make pool and db optional so the app can start even if the DATABASE_URL
+// is not configured yet. This allows a clearer log message and a fallback
+// migration attempt instead of an immediate crash during startup.
+export let pool: pg.Pool | null = null;
+export let db: ReturnType<typeof drizzle> | null = null;
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const db = drizzle(pool, { schema });
+if (!process.env.DATABASE_URL) {
+  console.warn(
+    "⚠️ DATABASE_URL is not set. The app will start but database operations will fail until you set DATABASE_URL in Render Environment variables.",
+  );
+} else {
+  pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  db = drizzle(pool, { schema });
+}
 
 /**
  * Apply SQL migrations from the migrations/ folder if core tables are missing.
  * This is a safe fallback so deploys don't fail when migrations weren't run during build.
  */
 export async function applyMigrationsIfNeeded() {
+  if (!pool) {
+    console.warn('⚠️ Skipping migrations: DATABASE_URL not configured or pool not available.');
+    return;
+  }
+
   const client = await pool.connect();
   try {
     const res = await client.query("SELECT to_regclass('public.users') AS exists");

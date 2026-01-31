@@ -1,10 +1,5 @@
-import { db } from "./db";
+import { getCollection, getNextSequence } from "./db";
 import {
-  users,
-  withdrawals,
-  tasks,
-  completedTasks,
-  botSettings,
   type User,
   type InsertUser,
   type Withdrawal,
@@ -14,9 +9,7 @@ import {
   type CompletedTask,
   type InsertCompletedTask,
   type BotSettings,
-  type InsertBotSettings,
 } from "@shared/schema";
-import { eq, sql, and } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -41,131 +34,170 @@ export interface IStorage {
   markReferralRewardClaimed(userId: number): Promise<void>;
 }
 
+function normalizeUserForReturn(u: any): User {
+  // Ensure the fields match the expected schema types
+  return {
+    id: u.id,
+    telegramId: u.telegramId,
+    username: u.username,
+    balance: (u.balance ?? 0).toString(),
+    level: u.level ?? 1,
+    referralCode: u.referralCode,
+    referrerId: u.referrerId,
+    referralRewardClaimed: !!u.referralRewardClaimed,
+    lastJumpTime: u.lastJumpTime ? new Date(u.lastJumpTime) : undefined,
+    lastDailyBonus: u.lastDailyBonus ? new Date(u.lastDailyBonus) : undefined,
+    createdAt: u.createdAt ? new Date(u.createdAt) : new Date(),
+  } as User;
+}
+
 export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    const col = getCollection<User & { _id?: any }>('users');
+    const u = await col.findOne({ id });
+    if (!u) return undefined;
+    return normalizeUserForReturn(u);
   }
 
   async getUserByTelegramId(telegramId: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.telegramId, telegramId));
-    return user;
+    const col = getCollection<User & { _id?: any }>('users');
+    const u = await col.findOne({ telegramId });
+    if (!u) return undefined;
+    return normalizeUserForReturn(u);
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
-    return user;
+    const col = getCollection<User & { _id?: any }>('users');
+    const u = await col.findOne({ username });
+    if (!u) return undefined;
+    return normalizeUserForReturn(u);
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
-    return user;
+    const col = getCollection('users');
+    const id = await getNextSequence('users');
+    const referralCode = `${id.toString(36)}${Math.floor(Math.random() * 1000)}`;
+    const doc: any = {
+      id,
+      telegramId: insertUser.telegramId,
+      username: insertUser.username,
+      balance: 0, // store numeric balance, normalized when returning
+      level: insertUser.level ?? 1,
+      referralCode,
+      referrerId: insertUser.referrerId,
+      referralRewardClaimed: false,
+      lastJumpTime: insertUser.lastJumpTime,
+      lastDailyBonus: insertUser.lastDailyBonus,
+      createdAt: new Date(),
+    };
+    await col.insertOne(doc);
+    return normalizeUserForReturn(doc);
   }
 
   async updateUserBalance(userId: number, amountToAdd: number): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({
-        balance: sql`${users.balance} + ${amountToAdd}`,
-        lastJumpTime: new Date(),
-      })
-      .where(eq(users.id, userId))
-      .returning();
-    return user;
+    const col = getCollection('users');
+    const res = await col.findOneAndUpdate({ id: userId }, { $inc: { balance: amountToAdd }, $set: { lastJumpTime: new Date() } }, { returnDocument: 'after' });
+    if (!res.value) throw new Error('User not found');
+    return normalizeUserForReturn(res.value);
   }
 
   async updateUserDailyBonus(userId: number): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({
-        lastDailyBonus: new Date(),
-      })
-      .where(eq(users.id, userId))
-      .returning();
-    return user;
+    const col = getCollection('users');
+    const res = await col.findOneAndUpdate({ id: userId }, { $set: { lastDailyBonus: new Date() } }, { returnDocument: 'after' });
+    if (!res.value) throw new Error('User not found');
+    return normalizeUserForReturn(res.value);
   }
 
   async createWithdrawal(withdrawal: InsertWithdrawal): Promise<Withdrawal> {
-    const [entry] = await db.insert(withdrawals).values(withdrawal).returning();
-    return entry;
+    const col = getCollection('withdrawals');
+    const id = await getNextSequence('withdrawals');
+    const doc: any = { id, ...withdrawal, createdAt: new Date() };
+    await col.insertOne(doc);
+    return doc as Withdrawal;
   }
 
   async getWithdrawals(userId: number): Promise<Withdrawal[]> {
-    return await db.select().from(withdrawals).where(eq(withdrawals.userId, userId));
+    const col = getCollection<Withdrawal>('withdrawals');
+    return await col.find({ userId }).toArray();
   }
 
   async getReferrals(referrerId: number): Promise<User[]> {
-    return await db.select().from(users).where(eq(users.referrerId, referrerId));
+    const col = getCollection<User & { _id?: any }>('users');
+    const rows = await col.find({ referrerId }).toArray();
+    return rows.map(normalizeUserForReturn);
   }
 
   async getTasks(): Promise<Task[]> {
-    return await db.select().from(tasks);
+    const col = getCollection<Task>('tasks');
+    return await col.find().toArray();
   }
 
   async getTask(id: number): Promise<Task | undefined> {
-    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
-    return task;
+    const col = getCollection<Task>('tasks');
+    return await col.findOne({ id });
   }
 
   async createTask(task: InsertTask): Promise<Task> {
-    const [newTask] = await db.insert(tasks).values(task).returning();
-    return newTask;
+    const col = getCollection('tasks');
+    const id = await getNextSequence('tasks');
+    const doc: any = { id, ...task, createdAt: new Date() };
+    await col.insertOne(doc);
+    return doc;
   }
 
   async deleteTask(id: number): Promise<void> {
-    await db.delete(tasks).where(eq(tasks.id, id));
+    const col = getCollection('tasks');
+    await col.deleteOne({ id });
   }
 
   async getCompletedTasks(userId: number): Promise<CompletedTask[]> {
-    return await db.select().from(completedTasks).where(eq(completedTasks.userId, userId));
+    const col = getCollection<CompletedTask>('completedTasks');
+    return await col.find({ userId }).toArray();
   }
 
   async completeTask(data: InsertCompletedTask): Promise<CompletedTask> {
-    const [completed] = await db.insert(completedTasks).values(data).returning();
-    return completed;
+    const col = getCollection('completedTasks');
+    const doc: any = { ...data, completedAt: new Date() };
+    await col.insertOne(doc);
+    return doc as CompletedTask;
   }
 
   async isTaskCompleted(userId: number, taskId: number): Promise<boolean> {
-    const [result] = await db
-      .select()
-      .from(completedTasks)
-      .where(and(eq(completedTasks.userId, userId), eq(completedTasks.taskId, taskId)));
-    return !!result;
+    const col = getCollection('completedTasks');
+    const found = await col.findOne({ userId, taskId });
+    return !!found;
   }
 
   async getSettings(): Promise<Record<string, string>> {
-    const settings = await db.select().from(botSettings);
+    const col = getCollection<BotSettings>('botSettings');
+    const rows = await col.find().toArray();
     const result: Record<string, string> = {};
-    for (const setting of settings) {
-      result[setting.key] = setting.value;
-    }
+    for (const r of rows) result[r.key] = r.value;
     return result;
   }
 
   async updateSettings(newSettings: Record<string, string>): Promise<void> {
+    const col = getCollection('botSettings');
     for (const [key, value] of Object.entries(newSettings)) {
-      await db
-        .insert(botSettings)
-        .values({ key, value })
-        .onConflictDoUpdate({
-          target: botSettings.key,
-          set: { value, updatedAt: new Date() },
-        });
+      await col.updateOne({ key }, { $set: { key, value, updatedAt: new Date() } }, { upsert: true });
     }
   }
 
   async getSetting(key: string): Promise<string | undefined> {
-    const [setting] = await db.select().from(botSettings).where(eq(botSettings.key, key));
-    return setting?.value;
+    const col = getCollection<BotSettings>('botSettings');
+    const s = await col.findOne({ key });
+    return s?.value;
   }
 
   async markReferralRewardClaimed(userId: number): Promise<void> {
-    await db.update(users).set({ referralRewardClaimed: true }).where(eq(users.id, userId));
+    const col = getCollection('users');
+    await col.updateOne({ id: userId }, { $set: { referralRewardClaimed: true } });
   }
 
   async getAllWithdrawals(): Promise<(Withdrawal & { username?: string })[]> {
-    const allWithdrawals = await db.select().from(withdrawals);
-    const result = [];
+    const col = getCollection<Withdrawal>('withdrawals');
+    const allWithdrawals = await col.find().toArray();
+    const result: (Withdrawal & { username?: string })[] = [];
     for (const w of allWithdrawals) {
       const user = await this.getUser(w.userId);
       result.push({ ...w, username: user?.username });
@@ -174,18 +206,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateWithdrawalStatus(id: number, status: string): Promise<Withdrawal> {
-    const [updated] = await db
-      .update(withdrawals)
-      .set({ status })
-      .where(eq(withdrawals.id, id))
-      .returning();
-    return updated;
+    const col = getCollection<Withdrawal>('withdrawals');
+    const res = await col.findOneAndUpdate({ id }, { $set: { status } }, { returnDocument: 'after' });
+    if (!res.value) throw new Error('Withdrawal not found');
+    return res.value;
   }
 
   async refundWithdrawal(id: number): Promise<void> {
-    const [withdrawal] = await db.select().from(withdrawals).where(eq(withdrawals.id, id));
-    if (withdrawal) {
-      await this.updateUserBalance(withdrawal.userId, parseFloat(withdrawal.amount as string));
+    const col = getCollection<Withdrawal>('withdrawals');
+    const w = await col.findOne({ id });
+    if (w) {
+      await this.updateUserBalance(w.userId, parseFloat(w.amount as any));
     }
   }
 }

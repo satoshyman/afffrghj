@@ -8,6 +8,39 @@ A Telegram Mini App game where users tap a frog character to earn TON cryptocurr
 
 Preferred communication style: Simple, everyday language.
 
+## Project Structure
+
+```
+├── client/              # Frontend React app
+│   ├── src/
+│   │   ├── components/  # UI components
+│   │   ├── pages/       # App pages
+│   │   ├── hooks/       # React hooks
+│   │   └── lib/         # Utilities
+│   └── index.html
+├── server/              # Backend Express server
+│   ├── index.ts         # Server entry point
+│   ├── routes.ts        # API routes
+│   ├── storage.ts       # Database operations
+│   └── db.ts           # Database connection
+├── shared/              # Shared types and schemas
+│   ├── schema.ts        # Database schemas
+│   └── routes.ts        # API route definitions
+├── render.yaml          # Render deployment config
+└── drizzle.config.ts    # Database config
+```
+
+## Deployment on Render
+
+### Environment Variables Required
+- `DATABASE_URL` - PostgreSQL connection string
+- `BOT_TOKEN` - Telegram bot token from @BotFather
+- `NODE_ENV` - Set to `production`
+
+### Commands
+- Build: `npm install && npm run build`
+- Start: `npm run start`
+
 ## System Architecture
 
 ### Frontend Architecture

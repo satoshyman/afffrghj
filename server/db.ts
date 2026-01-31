@@ -25,9 +25,9 @@ export async function connectMongo() {
   await ensureIndexesAndCounters();
 }
 
-function getCollection<T>(name: string): Collection<T> {
+function getCollection(name: string): Collection<any> {
   if (!db) throw new Error('MongoDB not connected');
-  return db.collection<T>(name);
+  return db.collection(name);
 }
 
 async function ensureIndexesAndCounters() {
@@ -44,17 +44,17 @@ async function ensureIndexesAndCounters() {
 
   // counters collection for numeric auto-increment ids
   const counters = getCollection('counters');
-  const existing = await counters.findOne({ _id: 'users' });
+  const existing = await counters.findOne({ _id: 'users' } as any);
   if (!existing) {
-    await counters.insertOne({ _id: 'users', seq: 1 });
+    await counters.insertOne({ _id: 'users', seq: 1 } as any);
   }
-  const existingW = await counters.findOne({ _id: 'withdrawals' });
+  const existingW = await counters.findOne({ _id: 'withdrawals' } as any);
   if (!existingW) {
-    await counters.insertOne({ _id: 'withdrawals', seq: 1 });
+    await counters.insertOne({ _id: 'withdrawals', seq: 1 } as any);
   }
-  const existingT = await counters.findOne({ _id: 'tasks' });
+  const existingT = await counters.findOne({ _id: 'tasks' } as any);
   if (!existingT) {
-    await counters.insertOne({ _id: 'tasks', seq: 1 });
+    await counters.insertOne({ _id: 'tasks', seq: 1 } as any);
   }
 
   console.log('✅ Indexes and counters ensured');
@@ -62,9 +62,9 @@ async function ensureIndexesAndCounters() {
 
 export async function getNextSequence(name: string): Promise<number> {
   if (!db) throw new Error('MongoDB not connected');
-  const counters = getCollection<{ _id: string; seq: number }>('counters');
-  const res = await counters.findOneAndUpdate({ _id: name }, { $inc: { seq: 1 } }, { returnDocument: 'after', upsert: true });
-  return res.value!.seq;
+  const counters = getCollection('counters');
+  const res = await counters.findOneAndUpdate({ _id: name } as any, { $inc: { seq: 1 } }, { returnDocument: 'after', upsert: true } as any);
+  return (res.value as any).seq;
 }
 
 export { getCollection };

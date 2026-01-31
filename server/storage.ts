@@ -53,22 +53,22 @@ function normalizeUserForReturn(u: any): User {
 
 export class DatabaseStorage implements IStorage {
   async getUser(id: number): Promise<User | undefined> {
-    const col = getCollection<User & { _id?: any }>('users');
-    const u = await col.findOne({ id });
+    const col = getCollection('users');
+    const u = await col.findOne({ id } as any);
     if (!u) return undefined;
     return normalizeUserForReturn(u);
   }
 
   async getUserByTelegramId(telegramId: string): Promise<User | undefined> {
-    const col = getCollection<User & { _id?: any }>('users');
-    const u = await col.findOne({ telegramId });
+    const col = getCollection('users');
+    const u = await col.findOne({ telegramId } as any);
     if (!u) return undefined;
     return normalizeUserForReturn(u);
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const col = getCollection<User & { _id?: any }>('users');
-    const u = await col.findOne({ username });
+    const col = getCollection('users');
+    const u = await col.findOne({ username } as any);
     if (!u) return undefined;
     return normalizeUserForReturn(u);
   }
@@ -77,17 +77,18 @@ export class DatabaseStorage implements IStorage {
     const col = getCollection('users');
     const id = await getNextSequence('users');
     const referralCode = `${id.toString(36)}${Math.floor(Math.random() * 1000)}`;
+    const level = (insertUser as any).level ?? 1;
     const doc: any = {
       id,
       telegramId: insertUser.telegramId,
       username: insertUser.username,
       balance: 0, // store numeric balance, normalized when returning
-      level: insertUser.level ?? 1,
+      level,
       referralCode,
-      referrerId: insertUser.referrerId,
+      referrerId: (insertUser as any).referrerId,
       referralRewardClaimed: false,
-      lastJumpTime: insertUser.lastJumpTime,
-      lastDailyBonus: insertUser.lastDailyBonus,
+      lastJumpTime: (insertUser as any).lastJumpTime,
+      lastDailyBonus: (insertUser as any).lastDailyBonus,
       createdAt: new Date(),
     };
     await col.insertOne(doc);
@@ -117,24 +118,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getWithdrawals(userId: number): Promise<Withdrawal[]> {
-    const col = getCollection<Withdrawal>('withdrawals');
-    return await col.find({ userId }).toArray();
+    const col = getCollection('withdrawals');
+    return await col.find({ userId } as any).toArray();
   }
 
   async getReferrals(referrerId: number): Promise<User[]> {
-    const col = getCollection<User & { _id?: any }>('users');
-    const rows = await col.find({ referrerId }).toArray();
+    const col = getCollection('users');
+    const rows = await col.find({ referrerId } as any).toArray();
     return rows.map(normalizeUserForReturn);
   }
 
   async getTasks(): Promise<Task[]> {
-    const col = getCollection<Task>('tasks');
+    const col = getCollection('tasks');
     return await col.find().toArray();
   }
 
   async getTask(id: number): Promise<Task | undefined> {
-    const col = getCollection<Task>('tasks');
-    return await col.findOne({ id });
+    const col = getCollection('tasks');
+    const t = await col.findOne({ id } as any);
+    return (t as unknown as Task) ?? undefined;
   }
 
   async createTask(task: InsertTask): Promise<Task> {
@@ -151,8 +153,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCompletedTasks(userId: number): Promise<CompletedTask[]> {
-    const col = getCollection<CompletedTask>('completedTasks');
-    return await col.find({ userId }).toArray();
+    const col = getCollection('completedTasks');
+    return await col.find({ userId } as any).toArray();
   }
 
   async completeTask(data: InsertCompletedTask): Promise<CompletedTask> {
@@ -169,7 +171,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSettings(): Promise<Record<string, string>> {
-    const col = getCollection<BotSettings>('botSettings');
+    const col = getCollection('botSettings');
     const rows = await col.find().toArray();
     const result: Record<string, string> = {};
     for (const r of rows) result[r.key] = r.value;
@@ -179,13 +181,13 @@ export class DatabaseStorage implements IStorage {
   async updateSettings(newSettings: Record<string, string>): Promise<void> {
     const col = getCollection('botSettings');
     for (const [key, value] of Object.entries(newSettings)) {
-      await col.updateOne({ key }, { $set: { key, value, updatedAt: new Date() } }, { upsert: true });
+      await col.updateOne({ key }, { $set: { key, value, updatedAt: new Date() } }, { upsert: true } as any);
     }
   }
 
   async getSetting(key: string): Promise<string | undefined> {
-    const col = getCollection<BotSettings>('botSettings');
-    const s = await col.findOne({ key });
+    const col = getCollection('botSettings');
+    const s = await col.findOne({ key } as any);
     return s?.value;
   }
 
@@ -195,26 +197,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllWithdrawals(): Promise<(Withdrawal & { username?: string })[]> {
-    const col = getCollection<Withdrawal>('withdrawals');
+    const col = getCollection('withdrawals');
     const allWithdrawals = await col.find().toArray();
     const result: (Withdrawal & { username?: string })[] = [];
     for (const w of allWithdrawals) {
       const user = await this.getUser(w.userId);
-      result.push({ ...w, username: user?.username });
+      result.push({ ...w, username: user?.username ?? undefined });
     }
     return result;
   }
 
   async updateWithdrawalStatus(id: number, status: string): Promise<Withdrawal> {
-    const col = getCollection<Withdrawal>('withdrawals');
-    const res = await col.findOneAndUpdate({ id }, { $set: { status } }, { returnDocument: 'after' });
+    const col = getCollection('withdrawals');
+    const res = await col.findOneAndUpdate({ id } as any, { $set: { status } } as any, { returnDocument: 'after' } as any);
     if (!res.value) throw new Error('Withdrawal not found');
-    return res.value;
+    return res.value as Withdrawal;
   }
 
   async refundWithdrawal(id: number): Promise<void> {
-    const col = getCollection<Withdrawal>('withdrawals');
-    const w = await col.findOne({ id });
+    const col = getCollection('withdrawals');
+    const w = await col.findOne({ id } as any);
     if (w) {
       await this.updateUserBalance(w.userId, parseFloat(w.amount as any));
     }

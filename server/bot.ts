@@ -23,9 +23,6 @@ if (!token) {
               telegramId: telegramId,
               username: ctx.from?.username || name,
               referrerId: referrer.id,
-              balance: "0",
-              level: 1,
-              experience: 0,
             });
             console.log(`✅ New user ${telegramId} referred by ${referrer.telegramId}`);
           }

@@ -53,9 +53,23 @@ export async function applyMigrationsIfNeeded() {
 
     console.log('⚙️ Applying migrations: users table not found (SQL fallback)');
 
-    const migrationsDir = path.resolve(process.cwd(), 'migrations');
-    if (!fs.existsSync(migrationsDir)) {
-      console.warn('No migrations directory found, skipping migrations');
+    // If running from compiled `dist` the CWD may not be project root.
+    // Search upward for a `migrations` directory to support Render runtime.
+    function findMigrationsDir(): string | null {
+      let dir = process.cwd();
+      for (let i = 0; i < 6; i++) {
+        const candidate = path.join(dir, 'migrations');
+        if (fs.existsSync(candidate)) return candidate;
+        const parent = path.dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+      }
+      return null;
+    }
+
+    const migrationsDir = findMigrationsDir();
+    if (!migrationsDir) {
+      console.warn('No migrations directory found (searched up from CWD), skipping migrations');
       return;
     }
 
